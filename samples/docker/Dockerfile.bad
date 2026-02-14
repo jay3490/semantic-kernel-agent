@@ -1,0 +1,18 @@
+FROM node:latest AS assets
+WORKDIR /web
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM ubuntu
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip curl
+ADD . /app
+ADD vendor/tools.tar.gz /opt/tools
+COPY --from=assets /web/dist /app/static
+WORKDIR /app
+RUN pip3 install -r requirements.txt
+USER root
+EXPOSE 8000
+CMD ["python3", "app.py"]
