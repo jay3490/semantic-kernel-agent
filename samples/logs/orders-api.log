@@ -1,0 +1,23 @@
+2026-03-14T09:00:01.120Z INFO  orders-api starting on port 8080
+2026-03-14T09:00:01.450Z INFO  connected to postgres at 10.0.3.14:5432
+2026-03-14T09:00:05.002Z WARN  slow query took 1250ms on table orders
+2026-03-14T09:00:07.310Z ERROR payment gateway timeout after 30000ms for order 81723
+2026-03-14T09:00:07.311Z ERROR unhandled exception for request 6f1c2a9e-3b4d-4c5e-8f70-1a2b3c4d5e6f
+System.InvalidOperationException: Sequence contains no elements
+   at Orders.Api.Pricing.Resolve(Int32 sku)
+   at Orders.Api.Handlers.CreateOrder.Handle(CreateOrderCommand command)
+2026-03-14T09:00:09.870Z INFO  GET /orders/81723 200 12ms
+2026-03-14T09:00:12.004Z ERROR payment gateway timeout after 30000ms for order 81731
+2026-03-14T09:00:12.950Z WARN  retrying connection to redis at 10.0.3.20:6379 (attempt 2)
+2026-03-14T09:00:13.105Z ERROR could not connect to redis at 10.0.3.20:6379: connection refused
+2026-03-14T09:00:15.442Z ERROR payment gateway timeout after 30000ms for order 81744
+2026-03-14T09:00:16.001Z INFO  GET /health 200 1ms
+2026-03-14T09:00:18.230Z ERROR could not connect to redis at 10.0.3.21:6379: connection refused
+2026-03-14T09:00:19.777Z ERROR user 'alice@example.com' not found in tenant 'acme'
+2026-03-14T09:00:21.010Z FATAL payment gateway circuit open after 5 consecutive failures
+2026-03-14T09:00:22.500Z ERROR payment gateway timeout after 30000ms for order 81760
+2026-03-14T09:00:24.300Z ERROR unhandled exception for request 0b7d4e21-9c3a-4f8b-a1d2-77e9c0f3b456
+System.InvalidOperationException: Sequence contains no elements
+   at Orders.Api.Pricing.Resolve(Int32 sku)
+2026-03-14T09:00:25.000Z DEBUG cache stats hits=1520 misses=37
+2026-03-14T09:00:26.818Z ERROR user 'bob@example.com' not found in tenant 'acme'
