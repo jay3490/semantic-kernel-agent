@@ -162,6 +162,22 @@ public sealed class ApiTests(WebApplicationFactory<Program> factory) : IClassFix
     }
 
     [Fact]
+    public async Task Model_failures_become_502_or_an_error_event()
+    {
+        var model = new ScriptedChatCompletionService()
+            .Then(_ => throw new HttpRequestException("connection refused"))
+            .Then(_ => throw new AggregateException(new HttpRequestException("connection refused")));
+        var client = CreateClient(model);
+
+        var chat = await client.PostAsJsonAsync("/chat", new { sessionId = "fail-1", message = "hello" });
+        var stream = await client.PostAsJsonAsync("/chat/stream", new { sessionId = "fail-1", message = "hello" });
+
+        Assert.Equal(HttpStatusCode.BadGateway, chat.StatusCode);
+        Assert.Contains("connection refused", await chat.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.BadGateway, stream.StatusCode);
+    }
+
+    [Fact]
     public async Task Deleting_a_session_forgets_it()
     {
         var model = new ScriptedChatCompletionService().ThenAnswer("one").ThenAnswer("two");

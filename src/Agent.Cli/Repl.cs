@@ -141,10 +141,10 @@ internal sealed class Repl(
             output.Write(ex.Message);
             output.Write(" The /k8s, /docker and /logs commands work without a model.");
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ChatModelFailure.IsModelFailure(ex))
         {
             output.Write(midLine ? Environment.NewLine : string.Empty);
-            output.Write($"error: the chat model could not be reached ({ex.Message})");
+            output.Write($"error: the chat model request failed ({ChatModelFailure.Describe(ex)})");
         }
         finally
         {

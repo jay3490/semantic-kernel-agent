@@ -80,9 +80,9 @@ public static class ChatEndpoints
             {
                 // The client went away; the agent rolls the unfinished turn back.
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ChatModelFailure.IsModelFailure(ex))
             {
-                var payload = JsonSerializer.Serialize(new { message = ex.Message }, json);
+                var payload = JsonSerializer.Serialize(new { message = $"The chat model request failed: {ChatModelFailure.Describe(ex)}" }, json);
                 await WriteEventAsync(response, "error", payload, CancellationToken.None);
             }
 
@@ -116,6 +116,8 @@ public static class ChatEndpoints
     {
         ChatModelNotConfiguredException => Results.Problem(exception.Message, statusCode: StatusCodes.Status503ServiceUnavailable),
         ArgumentException => Results.Problem(exception.Message, statusCode: StatusCodes.Status400BadRequest),
+        _ when ChatModelFailure.IsModelFailure(exception) => Results.Problem(
+            $"The chat model request failed: {ChatModelFailure.Describe(exception)}", statusCode: StatusCodes.Status502BadGateway),
         _ => null,
     };
 }
