@@ -61,4 +61,38 @@ public sealed class WorkspaceFilesTests : IDisposable
 
         Assert.Contains("does not exist", error.Message);
     }
+
+    [Fact]
+    public async Task Lists_files_recursively_as_root_relative_paths()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "chart", "templates"));
+        await File.WriteAllTextAsync(Path.Combine(_root, "chart", "Chart.yaml"), "name: x");
+        await File.WriteAllTextAsync(Path.Combine(_root, "chart", "templates", "svc.yaml"), "kind: Service");
+        await File.WriteAllTextAsync(Path.Combine(_root, "chart", "README.md"), "# x");
+
+        var files = Create();
+
+        Assert.Equal(["chart/Chart.yaml", "chart/README.md", "chart/templates/svc.yaml"], files.ListFiles("chart"));
+        Assert.Equal(["chart/Chart.yaml", "chart/templates/svc.yaml"], files.ListFiles("chart", ".yaml"));
+        Assert.Equal(3, files.ListFiles(".").Count);
+        Assert.Equal("chart/", files.DirectoryPrefix("chart/templates/.."));
+        Assert.Equal("", files.DirectoryPrefix("."));
+    }
+
+    [Theory]
+    [InlineData("..")]
+    [InlineData("chart/../..")]
+    public void Listing_refuses_directories_outside_the_root(string path)
+    {
+        Assert.Throws<WorkspaceAccessException>(() => Create().ListFiles(path));
+    }
+
+    [Fact]
+    public void Listing_a_missing_directory_is_an_access_error()
+    {
+        var error = Assert.Throws<WorkspaceAccessException>(() => Create().ListFiles("nope"));
+
+        Assert.Contains("not a directory", error.Message);
+        Assert.False(Create().DirectoryExists("nope"));
+    }
 }

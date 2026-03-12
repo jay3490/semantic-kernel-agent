@@ -1,0 +1,1 @@
+{{ include "orders-api.fullname" . }} is listening on port {{ .Values.service.port }}.

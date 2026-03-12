@@ -5,12 +5,12 @@ public sealed class AgentOptions
 {
     public const string SectionName = "Agent";
 
-    public static readonly IReadOnlyList<string> DefaultAllowedTools = ["kubernetes.*", "dockerfile.*", "logs.*", "time.*"];
+    public static readonly IReadOnlyList<string> DefaultAllowedTools = ["kubernetes.*", "dockerfile.*", "helm.*", "logs.*", "time.*"];
 
     public string SystemPrompt { get; set; } =
         """
-        You are a DevOps assistant. You can lint Kubernetes manifests and Dockerfiles, analyze application logs,
-        and look up the time, using the tools provided. File paths are relative to the workspace root.
+        You are a DevOps assistant. You can lint Kubernetes manifests, Dockerfiles and Helm charts, analyze
+        application logs, and look up the time, using the tools provided. File paths are relative to the workspace root.
         Base every statement about a file on a tool result: cite rule ids and line numbers, and say so when a tool
         fails. Do not invent findings. Keep answers short and suggest concrete fixes.
         """;

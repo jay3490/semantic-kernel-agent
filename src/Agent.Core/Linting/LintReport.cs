@@ -8,15 +8,16 @@ public sealed record LintReport
         Linter = linter;
         Findings = findings
             .OrderByDescending(f => f.Severity)
+            .ThenBy(f => f.File, StringComparer.Ordinal)
             .ThenBy(f => f.Line ?? int.MaxValue)
             .ThenBy(f => f.RuleId, StringComparer.Ordinal)
             .ToArray();
     }
 
-    /// <summary>Which linter produced the report: <c>kubernetes</c> or <c>dockerfile</c>.</summary>
+    /// <summary>Which linter produced the report, for example <c>kubernetes</c> or <c>dockerfile</c>.</summary>
     public string Linter { get; }
 
-    /// <summary>Findings ordered by severity (errors first), then by line.</summary>
+    /// <summary>Findings ordered by severity (errors first), then by file and line.</summary>
     public IReadOnlyList<LintFinding> Findings { get; }
 
     public int Errors => Findings.Count(f => f.Severity == Severity.Error);

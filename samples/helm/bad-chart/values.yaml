@@ -1,0 +1,11 @@
+image:
+  repository: nginx
+  tag: latest
+
+worker:
+  image: busybox
+
+resources: {}
+
+securityContext:
+  privileged: true
