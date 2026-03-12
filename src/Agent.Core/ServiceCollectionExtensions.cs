@@ -3,6 +3,7 @@ using Agent.Core.Filters;
 using Agent.Core.History;
 using Agent.Core.Linting;
 using Agent.Core.Linting.Helm;
+using Agent.Core.Linting.Terraform;
 using Agent.Core.Logs;
 using Agent.Core.Plugins;
 using Agent.Core.Workspace;
@@ -41,16 +42,19 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<KubernetesManifestLinter>();
         services.AddSingleton<DockerfileLinter>();
         services.AddSingleton<HelmChartLinter>();
+        services.AddSingleton<TerraformLinter>();
         services.AddSingleton<LogAnalyzer>();
 
         services.AddSingleton<KubernetesManifestPlugin>();
         services.AddSingleton<DockerfilePlugin>();
         services.AddSingleton<HelmChartPlugin>();
+        services.AddSingleton<TerraformPlugin>();
         services.AddSingleton<LogAnalysisPlugin>();
         services.AddSingleton<TimePlugin>();
         AddPlugin<KubernetesManifestPlugin>(services, KubernetesManifestPlugin.PluginName);
         AddPlugin<DockerfilePlugin>(services, DockerfilePlugin.PluginName);
         AddPlugin<HelmChartPlugin>(services, HelmChartPlugin.PluginName);
+        AddPlugin<TerraformPlugin>(services, TerraformPlugin.PluginName);
         AddPlugin<LogAnalysisPlugin>(services, LogAnalysisPlugin.PluginName);
         AddPlugin<TimePlugin>(services, TimePlugin.PluginName);
 

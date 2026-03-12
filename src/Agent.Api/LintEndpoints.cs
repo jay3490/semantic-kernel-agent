@@ -22,6 +22,9 @@ public static class LintEndpoints
         lint.MapPost("/dockerfile", (HttpRequest request, DockerfilePlugin plugin, IOptions<WorkspaceOptions> limits, CancellationToken cancellationToken) =>
             LintBodyAsync(request, limits.Value.MaxFileBytes, plugin.LintDockerfile, cancellationToken));
 
+        lint.MapPost("/terraform", (HttpRequest request, TerraformPlugin plugin, IOptions<WorkspaceOptions> limits, CancellationToken cancellationToken) =>
+            LintBodyAsync(request, limits.Value.MaxFileBytes, plugin.LintTerraform, cancellationToken));
+
         return app;
     }
 
