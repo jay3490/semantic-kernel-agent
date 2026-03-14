@@ -1,0 +1,31 @@
+name: pr-preview
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+  issue_comment:
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@main
+      - name: Build
+        run: npm ci && npm run build
+      - name: Comment
+        run: |
+          echo "Building ${{ github.event.pull_request.title }}"
+
+  label:
+    permissions: write-all
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: preview
+
+  reuse:
+    uses: example/workflows/.github/workflows/deploy.yml@main

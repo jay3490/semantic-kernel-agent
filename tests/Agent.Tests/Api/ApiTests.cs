@@ -83,6 +83,18 @@ public sealed class ApiTests(WebApplicationFactory<Program> factory) : IClassFix
     }
 
     [Fact]
+    public async Task Lint_github_actions_returns_a_structured_report()
+    {
+        var response = await CreateClient().PostAsync("/lint/github-actions",
+            new StringContent(Samples.Read("github-actions/bad-workflow.yml"), Encoding.UTF8, "application/yaml"));
+
+        response.EnsureSuccessStatusCode();
+        using var report = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("github-actions", report.RootElement.GetProperty("linter").GetString());
+        Assert.Equal(2, report.RootElement.GetProperty("errors").GetInt32());
+    }
+
+    [Fact]
     public async Task Lint_rejects_empty_and_oversized_bodies()
     {
         var empty = await CreateClient().PostAsync("/lint/dockerfile", new StringContent(""));

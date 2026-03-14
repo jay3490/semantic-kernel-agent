@@ -43,18 +43,21 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DockerfileLinter>();
         services.AddSingleton<HelmChartLinter>();
         services.AddSingleton<TerraformLinter>();
+        services.AddSingleton<GitHubActionsLinter>();
         services.AddSingleton<LogAnalyzer>();
 
         services.AddSingleton<KubernetesManifestPlugin>();
         services.AddSingleton<DockerfilePlugin>();
         services.AddSingleton<HelmChartPlugin>();
         services.AddSingleton<TerraformPlugin>();
+        services.AddSingleton<GitHubActionsPlugin>();
         services.AddSingleton<LogAnalysisPlugin>();
         services.AddSingleton<TimePlugin>();
         AddPlugin<KubernetesManifestPlugin>(services, KubernetesManifestPlugin.PluginName);
         AddPlugin<DockerfilePlugin>(services, DockerfilePlugin.PluginName);
         AddPlugin<HelmChartPlugin>(services, HelmChartPlugin.PluginName);
         AddPlugin<TerraformPlugin>(services, TerraformPlugin.PluginName);
+        AddPlugin<GitHubActionsPlugin>(services, GitHubActionsPlugin.PluginName);
         AddPlugin<LogAnalysisPlugin>(services, LogAnalysisPlugin.PluginName);
         AddPlugin<TimePlugin>(services, TimePlugin.PluginName);
 

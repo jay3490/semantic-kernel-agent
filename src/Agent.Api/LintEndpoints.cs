@@ -25,6 +25,9 @@ public static class LintEndpoints
         lint.MapPost("/terraform", (HttpRequest request, TerraformPlugin plugin, IOptions<WorkspaceOptions> limits, CancellationToken cancellationToken) =>
             LintBodyAsync(request, limits.Value.MaxFileBytes, plugin.LintTerraform, cancellationToken));
 
+        lint.MapPost("/github-actions", (HttpRequest request, GitHubActionsPlugin plugin, IOptions<WorkspaceOptions> limits, CancellationToken cancellationToken) =>
+            LintBodyAsync(request, limits.Value.MaxFileBytes, plugin.LintWorkflow, cancellationToken));
+
         return app;
     }
 
