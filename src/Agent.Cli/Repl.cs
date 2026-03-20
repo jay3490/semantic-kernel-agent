@@ -80,7 +80,7 @@ internal sealed class Repl(
                 case "/exit" or "/quit":
                     return false;
                 case "/reset":
-                    agent.Reset(SessionId);
+                    await agent.ResetAsync(SessionId);
                     output.WriteLine("Conversation cleared.");
                     break;
                 case "/k8s" when parts.Length == 2:

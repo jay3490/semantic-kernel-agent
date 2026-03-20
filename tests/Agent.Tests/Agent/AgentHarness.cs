@@ -13,7 +13,7 @@ namespace Agent.Tests.Agent;
 /// <summary>Builds the agent exactly as the API does, with the scripted model in place of a real one.</summary>
 internal sealed class AgentHarness
 {
-    public AgentHarness(IDictionary<string, string?>? settings = null, bool withModel = true)
+    public AgentHarness(IDictionary<string, string?>? settings = null, bool withModel = true, Action<IServiceCollection>? configure = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Workspace:Root"] = Samples.Root })
@@ -23,6 +23,7 @@ internal sealed class AgentHarness
         var services = new ServiceCollection();
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<ILogger<ToolInvocationFilter>>(FilterLog);
+        configure?.Invoke(services);
         services.AddDevOpsAgent(configuration);
         if (withModel)
         {
@@ -40,6 +41,6 @@ internal sealed class AgentHarness
 
     public DevOpsAgent Agent => Services.GetRequiredService<DevOpsAgent>();
 
-    public ChatHistory History(string sessionId) =>
-        Services.GetRequiredService<IChatSessionStore>().GetOrCreate(sessionId, "unused").History;
+    public ChatHistory History(string sessionId) => Services.GetRequiredService<IChatSessionStore>()
+        .GetOrCreateAsync(sessionId, "unused").GetAwaiter().GetResult().History;
 }

@@ -108,7 +108,7 @@ public sealed partial class DevOpsAgent
         }
         finally
         {
-            EndTurn(session, turnStart, completed);
+            await EndTurnAsync(session, turnStart, completed).ConfigureAwait(false);
         }
     }
 
@@ -169,12 +169,13 @@ public sealed partial class DevOpsAgent
         }
         finally
         {
-            EndTurn(session, turnStart, completed);
+            await EndTurnAsync(session, turnStart, completed).ConfigureAwait(false);
         }
     }
 
-    /// <summary>Forgets a session's history.</summary>
-    public bool Reset(string sessionId) => _sessions.Remove(sessionId);
+    /// <summary>Forgets a session's history. Returns false when the session did not exist.</summary>
+    public Task<bool> ResetAsync(string sessionId, CancellationToken cancellationToken = default) =>
+        _sessions.RemoveAsync(sessionId, cancellationToken);
 
     private IChatCompletionService ResolveChatService() =>
         _kernel.Services.GetService<IChatCompletionService>() ?? throw new ChatModelNotConfiguredException();
@@ -187,7 +188,7 @@ public sealed partial class DevOpsAgent
             throw new ArgumentException("The message is empty.", nameof(message));
         }
 
-        var session = _sessions.GetOrCreate(sessionId, _options.SystemPrompt);
+        var session = await _sessions.GetOrCreateAsync(sessionId, _options.SystemPrompt, cancellationToken).ConfigureAwait(false);
         await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         session.History.AddUserMessage(message);
@@ -201,17 +202,28 @@ public sealed partial class DevOpsAgent
     }
 
     /// <summary>
-    /// Releases the session. A turn that did not complete (model error, cancellation, client gone) is removed
-    /// from the history, so a half-finished tool exchange never reaches the model on the next turn.
+    /// Saves a completed turn and releases the session. A turn that did not complete (model error, cancellation,
+    /// client gone) is removed from the history instead and never saved, so a half-finished tool exchange never
+    /// reaches the model on the next turn.
     /// </summary>
-    private static void EndTurn(ChatSession session, int turnStart, bool completed)
+    private async Task EndTurnAsync(ChatSession session, int turnStart, bool completed)
     {
-        if (!completed)
+        try
         {
-            session.History.RemoveRange(turnStart, session.History.Count - turnStart);
+            if (completed)
+            {
+                // The reply has been produced; save it even if the caller is no longer listening.
+                await _sessions.SaveAsync(session, CancellationToken.None).ConfigureAwait(false);
+            }
+            else
+            {
+                session.History.RemoveRange(turnStart, session.History.Count - turnStart);
+            }
         }
-
-        session.Gate.Release();
+        finally
+        {
+            session.Gate.Release();
+        }
     }
 
     private PromptExecutionSettings SettingsFor(int round) =>

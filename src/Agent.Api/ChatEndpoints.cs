@@ -28,8 +28,8 @@ public static class ChatEndpoints
 
         chat.MapPost("/stream", StreamAsync);
 
-        chat.MapDelete("/{sessionId}", (string sessionId, DevOpsAgent agent) =>
-            agent.Reset(sessionId) ? Results.NoContent() : Results.NotFound());
+        chat.MapDelete("/{sessionId}", async (string sessionId, DevOpsAgent agent, CancellationToken cancellationToken) =>
+            await agent.ResetAsync(sessionId, cancellationToken) ? Results.NoContent() : Results.NotFound());
 
         return app;
     }
