@@ -1,9 +1,11 @@
 using Agent.Api;
 using Agent.Core;
+using Agent.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDevOpsAgent(builder.Configuration);
+builder.Services.AddChatSessionStorage(builder.Configuration);
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();

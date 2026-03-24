@@ -13,6 +13,9 @@ public sealed class ChatSessionCache(int capacity)
 
     public int Count => _sessions.Count;
 
+    /// <summary>Ids of the cached sessions.</summary>
+    public IEnumerable<string> Ids => _sessions.Keys;
+
     public bool TryGet(string sessionId, out ChatSession session) => _sessions.TryGetValue(sessionId, out session!);
 
     /// <summary>Adds <paramref name="session"/> unless one with its id is already cached, and returns the cached one.</summary>

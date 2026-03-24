@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Agent.Api\Agent.Api.csproj" />
     <ProjectReference Include="..\..\src\Agent.Core\Agent.Core.csproj" />
+    <ProjectReference Include="..\..\src\Agent.Persistence\Agent.Persistence.csproj" />
   </ItemGroup>
 
   <ItemGroup>

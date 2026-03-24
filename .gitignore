@@ -9,3 +9,6 @@ TestResults/
 *.trx
 appsettings.Development.json
 appsettings.Local.json
+*.db
+*.db-shm
+*.db-wal

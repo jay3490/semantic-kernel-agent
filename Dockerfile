@@ -5,6 +5,7 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY global.json Directory.Build.props Directory.Packages.props ./
 COPY src/Agent.Core/Agent.Core.csproj src/Agent.Core/
+COPY src/Agent.Persistence/Agent.Persistence.csproj src/Agent.Persistence/
 COPY src/Agent.Api/Agent.Api.csproj src/Agent.Api/
 RUN dotnet restore src/Agent.Api/Agent.Api.csproj
 COPY src/ src/
