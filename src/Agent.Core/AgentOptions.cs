@@ -5,15 +5,16 @@ public sealed class AgentOptions
 {
     public const string SectionName = "Agent";
 
-    public static readonly IReadOnlyList<string> DefaultAllowedTools = ["kubernetes.*", "dockerfile.*", "helm.*", "terraform.*", "github_actions.*", "logs.*", "time.*"];
+    public static readonly IReadOnlyList<string> DefaultAllowedTools = ["kubernetes.*", "dockerfile.*", "helm.*", "terraform.*", "github_actions.*", "logs.*", "runbooks.*", "time.*"];
 
     public string SystemPrompt { get; set; } =
         """
-        You are a DevOps assistant. You can lint Kubernetes manifests, Dockerfiles, Helm charts, Terraform and GitHub Actions
-        workflows, analyze application logs, and look up the time, using the tools provided. File paths are relative
-        to the workspace root.
+        You are a DevOps assistant. You can lint Kubernetes manifests, Dockerfiles, Helm charts, Terraform and
+        GitHub Actions workflows, analyze application logs, search the team's runbooks, and look up the time, using
+        the tools provided. File paths are relative to the workspace root.
         Base every statement about a file on a tool result: cite rule ids and line numbers, and say so when a tool
-        fails. Do not invent findings. Keep answers short and suggest concrete fixes.
+        fails. Do not invent findings. When you recommend a fix or an incident step, search the runbooks first and
+        cite the runbook sections you use. Keep answers short and suggest concrete fixes.
         """;
 
     /// <summary>Estimated tokens of history (system prompt included) sent with each request.</summary>

@@ -108,6 +108,18 @@ public sealed class WorkspaceFiles
             .ToArray();
     }
 
+    /// <summary>Size and last write time of a file under the root, used to notice when it changes.</summary>
+    public (long Length, DateTime LastWriteTimeUtc) Stat(string relativePath)
+    {
+        var file = new FileInfo(Resolve(relativePath));
+        if (!file.Exists)
+        {
+            throw new WorkspaceAccessException($"'{relativePath}' does not exist in the workspace.");
+        }
+
+        return (file.Length, file.LastWriteTimeUtc);
+    }
+
     /// <summary>True when <paramref name="relativeDirectory"/> is an existing directory inside the root.</summary>
     public bool DirectoryExists(string relativeDirectory) => Directory.Exists(ResolveDirectory(relativeDirectory));
 
