@@ -36,7 +36,8 @@ public static class ChatEndpoints
 
     /// <summary>
     /// Streams one turn as server-sent events: <c>tool_call</c> and <c>tool_result</c> while tools run,
-    /// <c>delta</c> for each piece of text, then <c>done</c> with the full reply (or <c>error</c>).
+    /// <c>delta</c> for each piece of text, <c>review</c> when the reviewer pass ran (the deltas were the draft),
+    /// then <c>done</c> with the reply to keep (or <c>error</c>).
     /// </summary>
     private static async Task<IResult> StreamAsync(
         ChatRequest request,
@@ -99,6 +100,7 @@ public static class ChatEndpoints
         TextDelta delta => ("delta", new { text = delta.Text }),
         ToolCallStarted started => ("tool_call", new { tool = started.Tool }),
         ToolCallFinished finished => ("tool_result", finished.Call),
+        ReviewCompleted reviewed => ("review", reviewed.Review),
         ReplyCompleted completed => ("done", completed.Reply),
         _ => throw new InvalidOperationException($"Unknown stream event {streamEvent.GetType().Name}."),
     };

@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using Agent.Core.Review;
+
 namespace Agent.Core;
 
 /// <summary>One tool call made while answering a message.</summary>
@@ -7,7 +10,12 @@ namespace Agent.Core;
 public sealed record ToolCallRecord(string Tool, bool Succeeded, string? Error = null);
 
 /// <summary>The agent's answer to one user message.</summary>
-public sealed record AgentReply(string SessionId, string Reply, IReadOnlyList<ToolCallRecord> ToolCalls);
+/// <param name="Review">How the reviewer pass judged the answer; null when no review ran.</param>
+public sealed record AgentReply(
+    string SessionId,
+    string Reply,
+    IReadOnlyList<ToolCallRecord> ToolCalls,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AnswerReview? Review = null);
 
 /// <summary>Something that happened while a streamed reply was produced.</summary>
 public abstract record AgentStreamEvent;
@@ -20,6 +28,9 @@ public sealed record ToolCallStarted(string Tool) : AgentStreamEvent;
 
 /// <summary>A tool call finished.</summary>
 public sealed record ToolCallFinished(ToolCallRecord Call) : AgentStreamEvent;
+
+/// <summary>The reviewer pass finished. Streamed text was the draft; <see cref="ReplyCompleted"/> carries the answer to keep.</summary>
+public sealed record ReviewCompleted(AnswerReview Review) : AgentStreamEvent;
 
 /// <summary>The turn is over; carries the full reply.</summary>
 public sealed record ReplyCompleted(AgentReply Reply) : AgentStreamEvent;

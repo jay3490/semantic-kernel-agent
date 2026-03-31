@@ -2,6 +2,7 @@ using Agent.Core;
 using Agent.Core.Linting;
 using Agent.Core.Logs;
 using Agent.Core.Plugins;
+using Agent.Core.Review;
 using Agent.Core.Workspace;
 
 namespace Agent.Cli;
@@ -127,6 +128,20 @@ internal sealed class Repl(
                     case TextDelta delta:
                         output.Write(delta.Text);
                         midLine = true;
+                        break;
+                    case ReviewCompleted reviewed:
+                        output.WriteLine();
+                        output.Write($"  [review] {reviewed.Review.Verdict}");
+                        foreach (var issue in reviewed.Review.Issues)
+                        {
+                            output.Write($"{Environment.NewLine}    - {issue}");
+                        }
+
+                        midLine = true;
+                        break;
+                    case ReplyCompleted { Reply.Review.Verdict: AnswerReview.Revised } revised:
+                        output.WriteLine();
+                        output.Write($"Revised answer:{Environment.NewLine}{revised.Reply.Reply}");
                         break;
                 }
             }

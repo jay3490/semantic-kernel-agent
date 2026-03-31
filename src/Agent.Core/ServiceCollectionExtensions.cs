@@ -6,6 +6,7 @@ using Agent.Core.Linting.Helm;
 using Agent.Core.Linting.Terraform;
 using Agent.Core.Logs;
 using Agent.Core.Plugins;
+using Agent.Core.Review;
 using Agent.Core.Runbooks;
 using Agent.Core.Workspace;
 using Microsoft.Extensions.AI;
@@ -82,6 +83,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IOptions<AgentOptions>>().Value.MaxSessions));
 
         services.AddKernel();
+        services.AddSingleton<LintAnswerReviewer>();
         services.AddTransient<DevOpsAgent>();
 
         var model = configuration.GetSection(ChatModelOptions.SectionName).Get<ChatModelOptions>() ?? new ChatModelOptions();

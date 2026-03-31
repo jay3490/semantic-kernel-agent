@@ -4,6 +4,8 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using Agent.Core.Filters;
 using Agent.Core.History;
+using Agent.Core.Linting;
+using Agent.Core.Review;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -36,6 +38,7 @@ public sealed partial class DevOpsAgent
     private readonly IChatSessionStore _sessions;
     private readonly TokenBudgetHistoryTrimmer _trimmer;
     private readonly AgentOptions _options;
+    private readonly LintAnswerReviewer _reviewer;
     private readonly ILogger<DevOpsAgent> _logger;
     private readonly PromptExecutionSettings _toolSettings;
     private readonly PromptExecutionSettings _finalRoundSettings;
@@ -46,12 +49,14 @@ public sealed partial class DevOpsAgent
         TokenBudgetHistoryTrimmer trimmer,
         ToolAllowList allowList,
         IOptions<AgentOptions> options,
+        LintAnswerReviewer reviewer,
         ILogger<DevOpsAgent> logger)
     {
         _kernel = kernel;
         _sessions = sessions;
         _trimmer = trimmer;
         _options = options.Value;
+        _reviewer = reviewer;
         _logger = logger;
 
         // Only allowed functions are advertised to the model; the filter still guards invocation.
@@ -80,6 +85,7 @@ public sealed partial class DevOpsAgent
         try
         {
             var toolCalls = new List<ToolCallRecord>();
+            var evidence = new List<LintEvidence>();
             for (var round = 0; ; round++)
             {
                 var response = await chat.GetChatMessageContentAsync(
@@ -90,8 +96,10 @@ public sealed partial class DevOpsAgent
 
                 if (calls.Length == 0)
                 {
+                    var (answer, review) = await ReviewAsync(chat, session, message, response.Content ?? string.Empty, evidence, cancellationToken)
+                        .ConfigureAwait(false);
                     completed = true;
-                    return new AgentReply(sessionId, response.Content ?? string.Empty, toolCalls);
+                    return new AgentReply(sessionId, answer, toolCalls, review);
                 }
 
                 if (round >= _options.MaxToolRounds)
@@ -102,7 +110,7 @@ public sealed partial class DevOpsAgent
 
                 foreach (var call in calls)
                 {
-                    toolCalls.Add(await InvokeToolAsync(session.History, call, cancellationToken).ConfigureAwait(false));
+                    toolCalls.Add(await InvokeToolAsync(session.History, call, evidence, cancellationToken).ConfigureAwait(false));
                 }
             }
         }
@@ -125,6 +133,7 @@ public sealed partial class DevOpsAgent
         try
         {
             var toolCalls = new List<ToolCallRecord>();
+            var evidence = new List<LintEvidence>();
             for (var round = 0; ; round++)
             {
                 var text = new StringBuilder();
@@ -146,8 +155,15 @@ public sealed partial class DevOpsAgent
 
                 if (calls.Count == 0)
                 {
+                    var (answer, review) = await ReviewAsync(chat, session, message, text.ToString(), evidence, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (review is not null)
+                    {
+                        yield return new ReviewCompleted(review);
+                    }
+
                     completed = true;
-                    yield return new ReplyCompleted(new AgentReply(sessionId, text.ToString(), toolCalls));
+                    yield return new ReplyCompleted(new AgentReply(sessionId, answer, toolCalls, review));
                     yield break;
                 }
 
@@ -161,7 +177,7 @@ public sealed partial class DevOpsAgent
                 foreach (var call in calls)
                 {
                     yield return new ToolCallStarted(ToolName(call));
-                    var record = await InvokeToolAsync(session.History, call, cancellationToken).ConfigureAwait(false);
+                    var record = await InvokeToolAsync(session.History, call, evidence, cancellationToken).ConfigureAwait(false);
                     toolCalls.Add(record);
                     yield return new ToolCallFinished(record);
                 }
@@ -229,7 +245,34 @@ public sealed partial class DevOpsAgent
     private PromptExecutionSettings SettingsFor(int round) =>
         round < _options.MaxToolRounds ? _toolSettings : _finalRoundSettings;
 
-    private async Task<ToolCallRecord> InvokeToolAsync(ChatHistory history, FunctionCallContent call, CancellationToken cancellationToken)
+    /// <summary>
+    /// When reviewing is on and lint tools ran this turn, has the reviewer check the draft against their results.
+    /// A revised answer replaces the draft in the history too, so the next turn builds on what the user saw.
+    /// </summary>
+    private async Task<(string Answer, AnswerReview? Review)> ReviewAsync(
+        IChatCompletionService chat,
+        ChatSession session,
+        string question,
+        string draft,
+        IReadOnlyList<LintEvidence> evidence,
+        CancellationToken cancellationToken)
+    {
+        if (!_options.ReviewLintAnswers || evidence.Count == 0)
+        {
+            return (draft, null);
+        }
+
+        var outcome = await _reviewer.ReviewAsync(chat, question, draft, evidence, cancellationToken).ConfigureAwait(false);
+        if (outcome.Review.Verdict == AnswerReview.Revised)
+        {
+            session.History[^1] = new ChatMessageContent(AuthorRole.Assistant, outcome.Answer);
+        }
+
+        LogReviewed(session.Id, outcome.Review.Verdict, outcome.Review.Issues.Count);
+        return (outcome.Answer, outcome.Review);
+    }
+
+    private async Task<ToolCallRecord> InvokeToolAsync(ChatHistory history, FunctionCallContent call, List<LintEvidence> evidence, CancellationToken cancellationToken)
     {
         var tool = ToolName(call);
         try
@@ -243,6 +286,11 @@ public sealed partial class DevOpsAgent
             };
 
             history.Add(new FunctionResultContent(call, json).ToChatMessage());
+            if (result.Result is LintReport)
+            {
+                evidence.Add(new LintEvidence(tool, json));
+            }
+
             return new ToolCallRecord(tool, Succeeded: true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -299,4 +347,7 @@ public sealed partial class DevOpsAgent
 
     [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Session {SessionId}: stopped after {Rounds} tool rounds")]
     private partial void LogRoundLimit(string sessionId, int rounds);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Session {SessionId}: answer review {Verdict} with {Issues} issue(s)")]
+    private partial void LogReviewed(string sessionId, string verdict, int issues);
 }

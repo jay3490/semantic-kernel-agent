@@ -217,6 +217,35 @@ public sealed class ApiTests(WebApplicationFactory<Program> factory) : IClassFix
         Assert.Equal([AuthorRole.System, AuthorRole.User], model.Requests[1].Select(m => m.Role));
     }
 
+    [Fact]
+    public async Task Reviewed_answers_carry_the_review_in_the_reply_and_the_stream()
+    {
+        var model = new ScriptedChatCompletionService()
+            .ThenCallTool("dockerfile", "lint_dockerfile_file", new { path = "docker/Dockerfile.bad" })
+            .ThenAnswer("All good.")
+            .ThenAnswer("""{"verdict": "revise", "issues": ["six findings were left out"], "revised_answer": "Six findings; start with DF002."}""")
+            .ThenCallTool("dockerfile", "lint_dockerfile_file", new { path = "docker/Dockerfile.bad" })
+            .ThenAnswer("Six findings.")
+            .ThenAnswer("""{"verdict": "approve", "issues": []}""");
+        var client = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Workspace:Root", Samples.Root);
+            builder.UseSetting("Agent:ReviewLintAnswers", "true");
+            builder.ConfigureTestServices(services => services.AddSingleton<IChatCompletionService>(model));
+        }).CreateClient();
+
+        var chat = await client.PostAsJsonAsync("/chat", new { sessionId = "rev-1", message = "lint docker/Dockerfile.bad" });
+        var stream = await client.PostAsJsonAsync("/chat/stream", new { sessionId = "rev-2", message = "lint docker/Dockerfile.bad" });
+
+        using var body = JsonDocument.Parse(await chat.Content.ReadAsStringAsync());
+        Assert.Equal("Six findings; start with DF002.", body.RootElement.GetProperty("reply").GetString());
+        Assert.Equal("revised", body.RootElement.GetProperty("review").GetProperty("verdict").GetString());
+
+        var events = ParseEvents(await stream.Content.ReadAsStringAsync());
+        Assert.Equal(["review", "done"], events.TakeLast(2).Select(e => e.Name));
+        Assert.Contains("\"verdict\":\"approved\"", events[^2].Data);
+    }
+
     private static List<(string Name, string Data)> ParseEvents(string body) =>
         body.Split("\n\n", StringSplitOptions.RemoveEmptyEntries)
             .Select(block => block.Split('\n'))

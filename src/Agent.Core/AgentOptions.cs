@@ -30,4 +30,24 @@ public sealed class AgentOptions
     public string[]? AllowedTools { get; set; }
 
     public IReadOnlyList<string> EffectiveAllowedTools => AllowedTools ?? DefaultAllowedTools;
+
+    /// <summary>
+    /// When true, an answer written after lint tools ran is checked by a second, tool-less reviewer pass against
+    /// the raw lint results before it is returned. Costs one more model call on those turns.
+    /// </summary>
+    public bool ReviewLintAnswers { get; set; }
+
+    /// <summary>System message for the reviewer pass.</summary>
+    public string ReviewerPrompt { get; set; } =
+        """
+        You review a DevOps assistant's answer before it is sent. You get the user's question, the assistant's
+        draft answer, and the raw JSON results of the lint tools it called. Check every statement about findings
+        against the raw results: rule ids, severities, line numbers, files, counts, and whether the input passed.
+        Flag findings the draft claims that are not in the results, details it misquotes, and errors it leaves out.
+        Do not add advice the results do not support.
+        Reply with only a JSON object:
+        {"verdict": "approve" or "revise", "issues": ["..."], "revised_answer": "..."}
+        Use "approve" with an empty issues list when the draft is accurate. With "revise", revised_answer is the
+        corrected answer, written for the user in the same style as the draft.
+        """;
 }
