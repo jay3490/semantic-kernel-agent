@@ -10,7 +10,7 @@ public sealed record ChatRequest(string? SessionId, string Message);
 
 public static class ChatEndpoints
 {
-    public static IEndpointRouteBuilder MapChatEndpoints(this IEndpointRouteBuilder app)
+    public static RouteGroupBuilder MapChatEndpoints(this IEndpointRouteBuilder app)
     {
         var chat = app.MapGroup("/chat").WithTags("Chat");
 
@@ -31,7 +31,7 @@ public static class ChatEndpoints
         chat.MapDelete("/{sessionId}", async (string sessionId, DevOpsAgent agent, CancellationToken cancellationToken) =>
             await agent.ResetAsync(sessionId, cancellationToken) ? Results.NoContent() : Results.NotFound());
 
-        return app;
+        return chat;
     }
 
     /// <summary>

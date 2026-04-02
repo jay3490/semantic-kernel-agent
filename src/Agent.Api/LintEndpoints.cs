@@ -12,7 +12,7 @@ namespace Agent.Api;
 /// </summary>
 public static class LintEndpoints
 {
-    public static IEndpointRouteBuilder MapLintEndpoints(this IEndpointRouteBuilder app)
+    public static RouteGroupBuilder MapLintEndpoints(this IEndpointRouteBuilder app)
     {
         var lint = app.MapGroup("/lint").WithTags("Lint");
 
@@ -28,7 +28,7 @@ public static class LintEndpoints
         lint.MapPost("/github-actions", (HttpRequest request, GitHubActionsPlugin plugin, IOptions<WorkspaceOptions> limits, CancellationToken cancellationToken) =>
             LintBodyAsync(request, limits.Value.MaxFileBytes, plugin.LintWorkflow, cancellationToken));
 
-        return app;
+        return lint;
     }
 
     private static async Task<IResult> LintBodyAsync(HttpRequest request, long maxBytes, Func<string, LintReport> lint, CancellationToken cancellationToken)
