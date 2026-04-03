@@ -40,4 +40,16 @@ public static class ServiceCollectionExtensions
         services.AddHostedService(sp => sp.GetRequiredService<ChatSessionCleanupService>());
         return services;
     }
+
+    /// <summary>With the SQLite provider, adds a <c>session-store</c> check that the database can be opened.</summary>
+    public static IHealthChecksBuilder AddSessionStoreCheck(this IHealthChecksBuilder builder, IConfiguration configuration, params string[] tags)
+    {
+        var options = configuration.GetSection(SessionStorageOptions.SectionName).Get<SessionStorageOptions>() ?? new SessionStorageOptions();
+        if (options.Provider == SessionStorageProvider.Sqlite)
+        {
+            builder.AddDbContextCheck<SessionDbContext>("session-store", tags: tags);
+        }
+
+        return builder;
+    }
 }

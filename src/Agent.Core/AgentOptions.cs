@@ -26,6 +26,9 @@ public sealed class AgentOptions
     /// <summary>Sessions kept in memory before the least recently active one is evicted.</summary>
     public int MaxSessions { get; set; } = 500;
 
+    /// <summary>Longest user message accepted, in characters. Longer messages are refused rather than trimmed.</summary>
+    public int MaxMessageCharacters { get; set; } = 16_000;
+
     /// <summary>Tools the model may call: <c>plugin.function</c>, <c>plugin.*</c> or <c>*</c>. Null means <see cref="DefaultAllowedTools"/>.</summary>
     public string[]? AllowedTools { get; set; }
 

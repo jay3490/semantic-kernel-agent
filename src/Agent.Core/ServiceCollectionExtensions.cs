@@ -32,6 +32,7 @@ public static class ServiceCollectionExtensions
             .Validate(o => o.HistoryTokenBudget > 0, "Agent:HistoryTokenBudget must be positive.")
             .Validate(o => o.MaxToolRounds >= 0, "Agent:MaxToolRounds cannot be negative.")
             .Validate(o => o.MaxSessions > 0, "Agent:MaxSessions must be positive.")
+            .Validate(o => o.MaxMessageCharacters > 0, "Agent:MaxMessageCharacters must be positive.")
             .ValidateOnStart();
         services.AddOptions<WorkspaceOptions>()
             .Bind(configuration.GetSection(WorkspaceOptions.SectionName))

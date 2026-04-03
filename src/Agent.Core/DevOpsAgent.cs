@@ -204,6 +204,11 @@ public sealed partial class DevOpsAgent
             throw new ArgumentException("The message is empty.", nameof(message));
         }
 
+        if (message.Length > _options.MaxMessageCharacters)
+        {
+            throw new ArgumentException($"The message is {message.Length} characters; the limit is {_options.MaxMessageCharacters}.", nameof(message));
+        }
+
         var session = await _sessions.GetOrCreateAsync(sessionId, _options.SystemPrompt, cancellationToken).ConfigureAwait(false);
         await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
