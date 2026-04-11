@@ -1,4 +1,5 @@
 using System.Text;
+using Agent.Api.OpenApi;
 using Agent.Core.Linting;
 using Agent.Core.Plugins;
 using Agent.Core.Workspace;
@@ -17,19 +18,39 @@ public static class LintEndpoints
         var lint = app.MapGroup("/lint").WithTags("Lint");
 
         lint.MapPost("/k8s", (HttpRequest request, KubernetesManifestPlugin plugin, IOptions<WorkspaceOptions> limits, CancellationToken cancellationToken) =>
-            LintBodyAsync(request, limits.Value.MaxFileBytes, plugin.LintManifest, cancellationToken));
+                LintBodyAsync(request, limits.Value.MaxFileBytes, plugin.LintManifest, cancellationToken))
+            .Document("LintKubernetes", "Lint Kubernetes manifests", "Kubernetes YAML (one or more documents)",
+                "apiVersion: v1\nkind: Pod\nmetadata:\n  name: debug\nspec:\n  containers:\n    - name: shell\n      image: busybox\n");
 
         lint.MapPost("/dockerfile", (HttpRequest request, DockerfilePlugin plugin, IOptions<WorkspaceOptions> limits, CancellationToken cancellationToken) =>
-            LintBodyAsync(request, limits.Value.MaxFileBytes, plugin.LintDockerfile, cancellationToken));
+                LintBodyAsync(request, limits.Value.MaxFileBytes, plugin.LintDockerfile, cancellationToken))
+            .Document("LintDockerfile", "Lint a Dockerfile", "Dockerfile text",
+                "FROM node:latest\nADD . /app\nRUN npm ci\nCMD [\"node\", \"server.js\"]\n");
 
         lint.MapPost("/terraform", (HttpRequest request, TerraformPlugin plugin, IOptions<WorkspaceOptions> limits, CancellationToken cancellationToken) =>
-            LintBodyAsync(request, limits.Value.MaxFileBytes, plugin.LintTerraform, cancellationToken));
+                LintBodyAsync(request, limits.Value.MaxFileBytes, plugin.LintTerraform, cancellationToken))
+            .Document("LintTerraform", "Run static checks on Terraform", "The contents of one .tf file",
+                "resource \"aws_security_group_rule\" \"ssh\" {\n  type        = \"ingress\"\n  from_port   = 22\n  to_port     = 22\n  protocol    = \"tcp\"\n  cidr_blocks = [\"0.0.0.0/0\"]\n}\n");
 
         lint.MapPost("/github-actions", (HttpRequest request, GitHubActionsPlugin plugin, IOptions<WorkspaceOptions> limits, CancellationToken cancellationToken) =>
-            LintBodyAsync(request, limits.Value.MaxFileBytes, plugin.LintWorkflow, cancellationToken));
+                LintBodyAsync(request, limits.Value.MaxFileBytes, plugin.LintWorkflow, cancellationToken))
+            .Document("LintGitHubActions", "Lint a GitHub Actions workflow", "Workflow YAML",
+                "on: pull_request_target\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n");
 
         return lint;
     }
+
+    private static RouteHandlerBuilder Document(this RouteHandlerBuilder builder, string name, string summary, string bodyDescription, string example) =>
+        builder
+            .WithName(name)
+            .WithSummary(summary)
+            .WithDescription("No model is involved. Send the raw file as the body; the response is a LintReport with findings ordered by severity.")
+            .Produces<LintReport>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status413PayloadTooLarge)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .AcceptsText(bodyDescription, example);
 
     private static async Task<IResult> LintBodyAsync(HttpRequest request, long maxBytes, Func<string, LintReport> lint, CancellationToken cancellationToken)
     {

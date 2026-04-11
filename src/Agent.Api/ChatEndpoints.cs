@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Agent.Core;
+using Agent.Api.OpenApi;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
 
@@ -15,21 +16,38 @@ public static class ChatEndpoints
         var chat = app.MapGroup("/chat").WithTags("Chat");
 
         chat.MapPost("/", async (ChatRequest request, DevOpsAgent agent, CancellationToken cancellationToken) =>
-        {
-            try
             {
-                return Results.Ok(await agent.ChatAsync(SessionIdFor(request), request.Message, cancellationToken));
-            }
-            catch (Exception ex) when (ToProblem(ex) is { } problem)
-            {
-                return problem;
-            }
-        });
+                try
+                {
+                    return Results.Ok(await agent.ChatAsync(SessionIdFor(request), request.Message, cancellationToken));
+                }
+                catch (Exception ex) when (ToProblem(ex) is { } problem)
+                {
+                    return problem;
+                }
+            })
+            .WithName("Chat")
+            .WithSummary("Answer a message")
+            .WithDescription("Runs one agent turn: the model may call tools (listed in toolCalls) before it answers. Omit sessionId to start a new session; its id is returned. With Agent:ReviewLintAnswers on, answers based on lint results carry the reviewer's verdict in review.")
+            .Produces<AgentReply>()
+            .ProducesChatProblems()
+            .WithJsonExample(Example);
 
-        chat.MapPost("/stream", StreamAsync);
+        chat.MapPost("/stream", StreamAsync)
+            .WithName("ChatStream")
+            .WithSummary("Answer a message as server-sent events")
+            .WithDescription("Same turn as POST /chat, streamed: tool_call and tool_result while tools run, delta for each piece of text, review when the reviewer pass ran, then done with the reply (or error).")
+            .Produces(StatusCodes.Status200OK, contentType: "text/event-stream")
+            .ProducesChatProblems()
+            .WithJsonExample(Example);
 
         chat.MapDelete("/{sessionId}", async (string sessionId, DevOpsAgent agent, CancellationToken cancellationToken) =>
-            await agent.ResetAsync(sessionId, cancellationToken) ? Results.NoContent() : Results.NotFound());
+                await agent.ResetAsync(sessionId, cancellationToken) ? Results.NoContent() : Results.NotFound())
+            .WithName("ResetSession")
+            .WithSummary("Forget a session")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
 
         return chat;
     }
@@ -110,6 +128,17 @@ public static class ChatEndpoints
         await response.WriteAsync($"event: {name}\ndata: {data}\n\n", cancellationToken);
         await response.Body.FlushAsync(cancellationToken);
     }
+
+    private static readonly ChatRequest Example = new("demo", "Lint samples/helm/bad-chart and tell me what to fix first.");
+
+    private static RouteHandlerBuilder ProducesChatProblems(this RouteHandlerBuilder builder) =>
+        builder
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status413PayloadTooLarge)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .ProducesProblem(StatusCodes.Status502BadGateway)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
     private static string SessionIdFor(ChatRequest request) =>
         string.IsNullOrEmpty(request.SessionId) ? Guid.NewGuid().ToString("N") : request.SessionId;

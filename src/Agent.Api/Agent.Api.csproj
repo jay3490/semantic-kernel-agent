@@ -5,6 +5,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Agent.Core\Agent.Core.csproj" />
     <ProjectReference Include="..\Agent.Persistence\Agent.Persistence.csproj" />
   </ItemGroup>
