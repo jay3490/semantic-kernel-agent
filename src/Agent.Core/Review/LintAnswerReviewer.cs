@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Agent.Core.Telemetry;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
@@ -37,7 +39,7 @@ public sealed record ReviewOutcome(AnswerReview Review, string Answer);
 /// draft or returns a corrected one. Before asking the model it runs a deterministic check: every rule id the draft
 /// mentions must appear in some result, so an invented finding is caught even if the reviewer model misses it.
 /// </summary>
-public sealed partial class LintAnswerReviewer(IOptions<AgentOptions> options, ILogger<LintAnswerReviewer> logger)
+public sealed partial class LintAnswerReviewer(IOptions<AgentOptions> options, AgentTelemetry telemetry, ILogger<LintAnswerReviewer> logger)
 {
     /// <summary>Raw results longer than this are cut, so a huge report cannot crowd the reviewer's context.</summary>
     internal const int MaxEvidenceCharacters = 24_000;
@@ -55,6 +57,7 @@ public sealed partial class LintAnswerReviewer(IOptions<AgentOptions> options, I
         string question,
         string draft,
         IReadOnlyList<LintEvidence> evidence,
+        ActivityContext parent,
         CancellationToken cancellationToken)
     {
         var unsupported = UnsupportedRuleIds(draft, evidence);
@@ -66,13 +69,17 @@ public sealed partial class LintAnswerReviewer(IOptions<AgentOptions> options, I
         history.AddUserMessage(BuildRequest(question, draft, evidence, automaticIssues));
 
         string reply;
+        using var activity = AgentTelemetry.StartModelCall("review", AgentTelemetry.ModelIdOf(chat), parent);
+        var started = Stopwatch.GetTimestamp();
         try
         {
             var response = await chat.GetChatMessageContentAsync(history, ReviewSettings, kernel: null, cancellationToken).ConfigureAwait(false);
+            telemetry.RecordModelCall(activity, "review", succeeded: true, Stopwatch.GetElapsedTime(started), response.Metadata);
             reply = response.Content ?? string.Empty;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            telemetry.RecordModelCall(activity, "review", succeeded: false, Stopwatch.GetElapsedTime(started), error: ex.Message);
             LogReviewFailed(ex);
             return new ReviewOutcome(new AnswerReview(AnswerReview.Unavailable, [.. automaticIssues, $"The reviewer model call failed: {ChatModelFailure.Describe(ex)}"]), draft);
         }

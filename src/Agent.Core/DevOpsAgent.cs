@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -6,6 +7,7 @@ using Agent.Core.Filters;
 using Agent.Core.History;
 using Agent.Core.Linting;
 using Agent.Core.Review;
+using Agent.Core.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -39,6 +41,7 @@ public sealed partial class DevOpsAgent
     private readonly TokenBudgetHistoryTrimmer _trimmer;
     private readonly AgentOptions _options;
     private readonly LintAnswerReviewer _reviewer;
+    private readonly AgentTelemetry _telemetry;
     private readonly ILogger<DevOpsAgent> _logger;
     private readonly PromptExecutionSettings _toolSettings;
     private readonly PromptExecutionSettings _finalRoundSettings;
@@ -50,6 +53,7 @@ public sealed partial class DevOpsAgent
         ToolAllowList allowList,
         IOptions<AgentOptions> options,
         LintAnswerReviewer reviewer,
+        AgentTelemetry telemetry,
         ILogger<DevOpsAgent> logger)
     {
         _kernel = kernel;
@@ -57,6 +61,7 @@ public sealed partial class DevOpsAgent
         _trimmer = trimmer;
         _options = options.Value;
         _reviewer = reviewer;
+        _telemetry = telemetry;
         _logger = logger;
 
         // Only allowed functions are advertised to the model; the filter still guards invocation.
@@ -79,6 +84,7 @@ public sealed partial class DevOpsAgent
     public async Task<AgentReply> ChatAsync(string sessionId, string message, CancellationToken cancellationToken = default)
     {
         var chat = ResolveChatService();
+        using var turn = AgentTelemetry.StartTurn(sessionId, streaming: false);
         var (session, turnStart) = await BeginTurnAsync(sessionId, message, cancellationToken).ConfigureAwait(false);
         var completed = false;
 
@@ -88,15 +94,14 @@ public sealed partial class DevOpsAgent
             var evidence = new List<LintEvidence>();
             for (var round = 0; ; round++)
             {
-                var response = await chat.GetChatMessageContentAsync(
-                    session.History, SettingsFor(round), _kernel, cancellationToken).ConfigureAwait(false);
+                var response = await CallModelAsync(chat, session.History, SettingsFor(round), turn, cancellationToken).ConfigureAwait(false);
 
                 var calls = FunctionCallContent.GetFunctionCalls(response).ToArray();
                 session.History.Add(response);
 
                 if (calls.Length == 0)
                 {
-                    var (answer, review) = await ReviewAsync(chat, session, message, response.Content ?? string.Empty, evidence, cancellationToken)
+                    var (answer, review) = await ReviewAsync(chat, session, message, response.Content ?? string.Empty, evidence, turn, cancellationToken)
                         .ConfigureAwait(false);
                     completed = true;
                     return new AgentReply(sessionId, answer, toolCalls, review);
@@ -110,12 +115,13 @@ public sealed partial class DevOpsAgent
 
                 foreach (var call in calls)
                 {
-                    toolCalls.Add(await InvokeToolAsync(session.History, call, evidence, cancellationToken).ConfigureAwait(false));
+                    toolCalls.Add(await InvokeToolAsync(session.History, call, evidence, turn, cancellationToken).ConfigureAwait(false));
                 }
             }
         }
         finally
         {
+            MarkIncomplete(turn, completed);
             await EndTurnAsync(session, turnStart, completed).ConfigureAwait(false);
         }
     }
@@ -127,6 +133,7 @@ public sealed partial class DevOpsAgent
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var chat = ResolveChatService();
+        using var turn = AgentTelemetry.StartTurn(sessionId, streaming: true);
         var (session, turnStart) = await BeginTurnAsync(sessionId, message, cancellationToken).ConfigureAwait(false);
         var completed = false;
 
@@ -139,15 +146,36 @@ public sealed partial class DevOpsAgent
                 var text = new StringBuilder();
                 var callBuilder = new FunctionCallContentBuilder();
 
-                await foreach (var update in chat.GetStreamingChatMessageContentsAsync(
-                                   session.History, SettingsFor(round), _kernel, cancellationToken).ConfigureAwait(false))
+                // The span is parented explicitly: Activity.Current does not survive the yields of an async iterator.
+                var modelCall = AgentTelemetry.StartModelCall("chat", AgentTelemetry.ModelIdOf(chat), turn?.Context ?? default);
+                var started = Stopwatch.GetTimestamp();
+                IReadOnlyDictionary<string, object?>? usage = null;
+                var streamed = false;
+                try
                 {
-                    callBuilder.Append(update);
-                    if (!string.IsNullOrEmpty(update.Content))
+                    await foreach (var update in chat.GetStreamingChatMessageContentsAsync(
+                                       session.History, SettingsFor(round), _kernel, cancellationToken).ConfigureAwait(false))
                     {
-                        text.Append(update.Content);
-                        yield return new TextDelta(update.Content);
+                        callBuilder.Append(update);
+                        if (update.Metadata?.ContainsKey("Usage") == true)
+                        {
+                            usage = update.Metadata;
+                        }
+
+                        if (!string.IsNullOrEmpty(update.Content))
+                        {
+                            text.Append(update.Content);
+                            yield return new TextDelta(update.Content);
+                        }
                     }
+
+                    streamed = true;
+                }
+                finally
+                {
+                    _telemetry.RecordModelCall(modelCall, "chat", streamed, Stopwatch.GetElapsedTime(started), usage,
+                        streamed ? null : "The streamed response did not complete.");
+                    modelCall?.Dispose();
                 }
 
                 var calls = callBuilder.Build();
@@ -155,7 +183,7 @@ public sealed partial class DevOpsAgent
 
                 if (calls.Count == 0)
                 {
-                    var (answer, review) = await ReviewAsync(chat, session, message, text.ToString(), evidence, cancellationToken)
+                    var (answer, review) = await ReviewAsync(chat, session, message, text.ToString(), evidence, turn, cancellationToken)
                         .ConfigureAwait(false);
                     if (review is not null)
                     {
@@ -177,7 +205,7 @@ public sealed partial class DevOpsAgent
                 foreach (var call in calls)
                 {
                     yield return new ToolCallStarted(ToolName(call));
-                    var record = await InvokeToolAsync(session.History, call, evidence, cancellationToken).ConfigureAwait(false);
+                    var record = await InvokeToolAsync(session.History, call, evidence, turn, cancellationToken).ConfigureAwait(false);
                     toolCalls.Add(record);
                     yield return new ToolCallFinished(record);
                 }
@@ -185,6 +213,7 @@ public sealed partial class DevOpsAgent
         }
         finally
         {
+            MarkIncomplete(turn, completed);
             await EndTurnAsync(session, turnStart, completed).ConfigureAwait(false);
         }
     }
@@ -250,6 +279,33 @@ public sealed partial class DevOpsAgent
     private PromptExecutionSettings SettingsFor(int round) =>
         round < _options.MaxToolRounds ? _toolSettings : _finalRoundSettings;
 
+    /// <summary>One non-streaming model request, traced and counted.</summary>
+    private async Task<ChatMessageContent> CallModelAsync(
+        IChatCompletionService chat, ChatHistory history, PromptExecutionSettings settings, Activity? turn, CancellationToken cancellationToken)
+    {
+        using var activity = AgentTelemetry.StartModelCall("chat", AgentTelemetry.ModelIdOf(chat), turn?.Context ?? default);
+        var started = Stopwatch.GetTimestamp();
+        try
+        {
+            var response = await chat.GetChatMessageContentAsync(history, settings, _kernel, cancellationToken).ConfigureAwait(false);
+            _telemetry.RecordModelCall(activity, "chat", succeeded: true, Stopwatch.GetElapsedTime(started), response.Metadata);
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _telemetry.RecordModelCall(activity, "chat", succeeded: false, Stopwatch.GetElapsedTime(started), error: ex.Message);
+            throw;
+        }
+    }
+
+    private static void MarkIncomplete(Activity? turn, bool completed)
+    {
+        if (!completed)
+        {
+            turn?.SetStatus(ActivityStatusCode.Error, "The turn did not complete and was rolled back.");
+        }
+    }
+
     /// <summary>
     /// When reviewing is on and lint tools ran this turn, has the reviewer check the draft against their results.
     /// A revised answer replaces the draft in the history too, so the next turn builds on what the user saw.
@@ -260,6 +316,7 @@ public sealed partial class DevOpsAgent
         string question,
         string draft,
         IReadOnlyList<LintEvidence> evidence,
+        Activity? turn,
         CancellationToken cancellationToken)
     {
         if (!_options.ReviewLintAnswers || evidence.Count == 0)
@@ -267,19 +324,26 @@ public sealed partial class DevOpsAgent
             return (draft, null);
         }
 
-        var outcome = await _reviewer.ReviewAsync(chat, question, draft, evidence, cancellationToken).ConfigureAwait(false);
+        var outcome = await _reviewer.ReviewAsync(chat, question, draft, evidence, turn?.Context ?? default, cancellationToken).ConfigureAwait(false);
         if (outcome.Review.Verdict == AnswerReview.Revised)
         {
             session.History[^1] = new ChatMessageContent(AuthorRole.Assistant, outcome.Answer);
         }
 
+        _telemetry.RecordReview(outcome.Review.Verdict);
         LogReviewed(session.Id, outcome.Review.Verdict, outcome.Review.Issues.Count);
         return (outcome.Answer, outcome.Review);
     }
 
-    private async Task<ToolCallRecord> InvokeToolAsync(ChatHistory history, FunctionCallContent call, List<LintEvidence> evidence, CancellationToken cancellationToken)
+    private async Task<ToolCallRecord> InvokeToolAsync(
+        ChatHistory history, FunctionCallContent call, List<LintEvidence> evidence, Activity? turn, CancellationToken cancellationToken)
     {
         var tool = ToolName(call);
+
+        // Tool names come from the model; unknown ones share one metric label so they cannot explode cardinality.
+        var label = _kernel.Plugins.TryGetFunction(call.PluginName, call.FunctionName, out _) ? tool : "unknown";
+        using var activity = AgentTelemetry.StartToolCall(label, call.Id, turn?.Context ?? default);
+        var started = Stopwatch.GetTimestamp();
         try
         {
             var result = await call.InvokeAsync(_kernel, cancellationToken).ConfigureAwait(false);
@@ -296,6 +360,7 @@ public sealed partial class DevOpsAgent
                 evidence.Add(new LintEvidence(tool, json));
             }
 
+            _telemetry.RecordToolCall(activity, label, "success", Stopwatch.GetElapsedTime(started));
             return new ToolCallRecord(tool, Succeeded: true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -303,6 +368,7 @@ public sealed partial class DevOpsAgent
             // The model gets the error as the tool result so it can explain or try something else.
             var error = ex.Message;
             history.Add(new FunctionResultContent(call, $"Error: {error}").ToChatMessage());
+            _telemetry.RecordToolCall(activity, label, ex is ToolNotAllowedException ? "blocked" : "error", Stopwatch.GetElapsedTime(started), error);
             LogToolFailed(tool, error);
             return new ToolCallRecord(tool, Succeeded: false, error);
         }

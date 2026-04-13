@@ -8,6 +8,7 @@ using Agent.Core.Logs;
 using Agent.Core.Plugins;
 using Agent.Core.Review;
 using Agent.Core.Runbooks;
+using Agent.Core.Telemetry;
 using Agent.Core.Workspace;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -41,6 +42,8 @@ public static class ServiceCollectionExtensions
             .ValidateOnStart();
 
         services.TryAddSingleton(TimeProvider.System);
+        services.AddMetrics();
+        services.TryAddSingleton<AgentTelemetry>();
         services.AddSingleton<WorkspaceFiles>();
 
         services.AddSingleton<KubernetesManifestLinter>();

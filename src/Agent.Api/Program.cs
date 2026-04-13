@@ -2,6 +2,7 @@ using Agent.Api;
 using Agent.Api.Health;
 using Agent.Api.OpenApi;
 using Agent.Api.Security;
+using Agent.Api.Telemetry;
 using Agent.Core;
 using Agent.Core.Workspace;
 using Agent.Persistence;
@@ -13,6 +14,7 @@ builder.Services.AddChatSessionStorage(builder.Configuration);
 builder.Services.AddApiSecurity(builder.Configuration);
 builder.Services.AddAgentHealthChecks(builder.Configuration);
 builder.Services.AddAgentOpenApi();
+builder.Services.AddAgentTelemetry(builder.Configuration);
 builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = RequestLimits.AddTraceId);
 builder.Services.AddExceptionHandler<RequestLimits.BadRequestExceptionHandler>();
 builder.Services.AddOptions<ApiOptions>()
@@ -34,6 +36,7 @@ app.UseDeclaredRequestSizeLimits();
 
 app.MapAgentOpenApi();
 app.MapAgentHealthChecks();
+app.MapAgentMetrics();
 app.MapChatEndpoints()
     .RequireAuthorization(ApiSecurityExtensions.ClientPolicy)
     .RequireRateLimiting(ApiSecurityExtensions.RateLimitPolicy)
