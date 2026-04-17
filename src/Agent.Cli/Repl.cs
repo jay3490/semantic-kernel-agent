@@ -3,6 +3,7 @@ using Agent.Core.Linting;
 using Agent.Core.Logs;
 using Agent.Core.Plugins;
 using Agent.Core.Review;
+using Agent.Core.Runbooks;
 using Agent.Core.Workspace;
 
 namespace Agent.Cli;
@@ -15,7 +16,11 @@ internal sealed class Repl(
     DevOpsAgent agent,
     KubernetesManifestPlugin kubernetes,
     DockerfilePlugin dockerfile,
+    HelmChartPlugin helm,
+    TerraformPlugin terraform,
+    GitHubActionsPlugin workflows,
     LogAnalysisPlugin logs,
+    RunbookPlugin runbooks,
     WorkspaceFiles workspace,
     TextReader input,
     TextWriter output)
@@ -90,6 +95,18 @@ internal sealed class Repl(
                 case "/docker" when parts.Length == 2:
                     PrintReport(await dockerfile.LintDockerfileFileAsync(parts[1]));
                     break;
+                case "/helm" when parts.Length == 2:
+                    PrintReport(await helm.LintHelmChartAsync(parts[1]));
+                    break;
+                case "/tf" when parts.Length == 2:
+                    PrintReport(await terraform.LintTerraformPathAsync(parts[1]));
+                    break;
+                case "/gha" when parts.Length == 2:
+                    PrintReport(await workflows.LintWorkflowFileAsync(parts[1]));
+                    break;
+                case "/runbooks" when parts.Length >= 2:
+                    PrintRunbookHits(await runbooks.SearchRunbooksAsync(string.Join(' ', parts[1..])));
+                    break;
                 case "/logs" when parts.Length is 2 or 3:
                     var top = parts.Length == 3 && int.TryParse(parts[2], out var n) ? n : 5;
                     PrintLogReport(await logs.AnalyzeLogFileAsync(parts[1], top));
@@ -154,7 +171,7 @@ internal sealed class Repl(
         catch (ChatModelNotConfiguredException ex)
         {
             output.Write(ex.Message);
-            output.Write(" The /k8s, /docker and /logs commands work without a model.");
+            output.Write(" The /k8s, /docker, /helm, /tf, /gha and /logs commands work without a model.");
         }
         catch (Exception ex) when (ChatModelFailure.IsModelFailure(ex))
         {
@@ -174,11 +191,28 @@ internal sealed class Repl(
         foreach (var finding in report.Findings)
         {
             var line = finding.Line is { } l ? $"line {l}" : "";
-            output.WriteLine($"  {finding.Severity,-7} {finding.RuleId} {line,-8} {finding.Target}");
+            var file = finding.File is null ? string.Empty : $"{finding.File} ";
+            output.WriteLine($"  {finding.Severity,-7} {finding.RuleId,-7} {file}{line,-8} {finding.Target}");
             output.WriteLine($"          {finding.Message}");
         }
 
         output.WriteLine($"{report.Errors} error(s), {report.Warnings} warning(s), {report.Infos} info: {(report.Passed ? "passed" : "failed")}");
+    }
+
+    private void PrintRunbookHits(RunbookSearchResult result)
+    {
+        if (result.Note is not null)
+        {
+            output.WriteLine($"({result.Note})");
+        }
+
+        foreach (var hit in result.Hits)
+        {
+            output.WriteLine($"  {hit.Citation}  score {hit.Score}");
+            output.WriteLine($"          {hit.Snippet}");
+        }
+
+        output.WriteLine($"{result.Hits.Count} section(s), ranked by {result.Mode} search");
     }
 
     private void PrintLogReport(LogAnalysisReport report)
@@ -198,7 +232,11 @@ internal sealed class Repl(
             Ask anything in plain text; the agent decides which tools to use.
               /k8s <path>          lint a Kubernetes manifest (no model needed)
               /docker <path>       lint a Dockerfile (no model needed)
+              /helm <dir>          lint a Helm chart (no model needed)
+              /tf <path>           check a .tf file or Terraform module (no model needed)
+              /gha <path>          lint a GitHub Actions workflow (no model needed)
               /logs <path> [top]   summarize errors in a log file (no model needed)
+              /runbooks <query>    search the runbooks (keyword search without an embedding model)
               /reset               forget the conversation
               /exit                quit
             Paths are relative to the workspace. Ctrl+C cancels a reply in progress.

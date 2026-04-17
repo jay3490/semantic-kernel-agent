@@ -23,6 +23,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Agent.Api\Agent.Api.csproj" />
+    <!-- Aliased: the CLI and the API both have a Program class. -->
+    <ProjectReference Include="..\..\src\Agent.Cli\Agent.Cli.csproj" Aliases="cli" />
     <ProjectReference Include="..\..\src\Agent.Core\Agent.Core.csproj" />
     <ProjectReference Include="..\..\src\Agent.Persistence\Agent.Persistence.csproj" />
   </ItemGroup>
