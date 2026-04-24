@@ -9,3 +9,7 @@ tests/
 *.md
 Dockerfile
 .dockerignore
+deploy/
+docker-compose.yml
+.config/
+*.db

@@ -15,12 +15,16 @@ RUN dotnet publish src/Agent.Api/Agent.Api.csproj -c Release -o /out --no-restor
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /data \
+    && chown app:app /data
 WORKDIR /app
 COPY --from=build /out .
 COPY samples/ /workspace/samples/
+# /data holds the SQLite session database when Sessions__Provider=Sqlite; mount a volume there to keep it.
 ENV ASPNETCORE_HTTP_PORTS=8080 \
-    Workspace__Root=/workspace
+    Workspace__Root=/workspace \
+    Sessions__ConnectionString="Data Source=/data/sessions.db"
 USER app
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s CMD curl -fsS http://localhost:8080/health || exit 1

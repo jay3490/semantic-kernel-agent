@@ -1,0 +1,48 @@
+# Runs the API with SQLite sessions. With the "ollama" profile it also starts a local Ollama server:
+#   CHAT_MODEL_ENDPOINT=http://ollama:11434/v1 docker compose --profile ollama up --build
+#   docker compose exec ollama ollama pull llama3.1
+# Without the profile, point CHAT_MODEL_ENDPOINT at any OpenAI-compatible server, or set OPENAI_API_KEY.
+name: devops-agent
+
+services:
+  api:
+    build: .
+    image: semantic-kernel-agent-api:1.0.0
+    ports:
+      - "8080:8080"
+    environment:
+      ChatModel__ModelId: ${CHAT_MODEL_ID:-llama3.1}
+      ChatModel__Endpoint: ${CHAT_MODEL_ENDPOINT:-}
+      ChatModel__ApiKey: ${OPENAI_API_KEY:-}
+      Embeddings__ModelId: ${EMBEDDING_MODEL_ID:-}
+      Agent__ReviewLintAnswers: ${REVIEW_LINT_ANSWERS:-false}
+      Sessions__Provider: Sqlite
+      Sessions__ConnectionString: Data Source=/data/sessions.db
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      # To require an API key (16+ characters), uncomment:
+      # Auth__ApiKeys__0__Name: local
+      # Auth__ApiKeys__0__Key: ${DEVOPS_AGENT_API_KEY:?set DEVOPS_AGENT_API_KEY}
+    volumes:
+      - sessions:/data
+      - ./samples:/workspace/samples:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      ollama:
+        condition: service_started
+        required: false
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:0.5.7
+    profiles: ["ollama"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  sessions:
+  ollama:

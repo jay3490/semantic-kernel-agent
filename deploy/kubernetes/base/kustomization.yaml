@@ -1,0 +1,41 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: devops-agent
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: devops-agent
+      app.kubernetes.io/part-of: semantic-kernel-agent
+    includeSelectors: true
+
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - deployment.yaml
+  - service.yaml
+  - hpa.yaml
+  - pdb.yaml
+
+# Settings that are not secret. Each key becomes an environment variable (Section__Key).
+configMapGenerator:
+  - name: devops-agent-config
+    literals:
+      - Workspace__Root=/workspace
+      - Runbooks__Directory=samples/runbooks
+      - ChatModel__ModelId=gpt-4o-mini
+      - Embeddings__ModelId=text-embedding-3-small
+      - Agent__ReviewLintAnswers=true
+      - Sessions__Provider=Sqlite
+      - Sessions__ConnectionString=Data Source=/data/sessions.db
+      - Sessions__Ttl=1.00:00:00
+      - Auth__ApiKeys__0__Name=ci
+      - RateLimiting__PermitsPerMinute=60
+      - RateLimiting__Burst=20
+      - Telemetry__ServiceName=devops-agent-api
+
+# The image built from the repository's Dockerfile. Point it at your registry with
+#   kustomize edit set image semantic-kernel-agent-api=<registry>/semantic-kernel-agent-api:<tag>
+images:
+  - name: semantic-kernel-agent-api
+    newTag: "1.0.0"
